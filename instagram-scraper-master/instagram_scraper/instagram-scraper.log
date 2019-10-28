@@ -1,0 +1,7 @@
+2017-09-21 09:24:39,240 - __main__ - ERROR - Failed to get media for {
+Traceback (most recent call last):
+  File "<ipython-input-1-7520f1c340b6>", line 429, in media_gen
+    media = self.fetch_media_json(username, max_id=None)
+  File "<ipython-input-1-7520f1c340b6>", line 462, in fetch_media_json
+    raise ValueError('User {0} does not exist'.format(username))
+ValueError: User { does not exist

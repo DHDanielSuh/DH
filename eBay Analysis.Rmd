@@ -1,0 +1,98 @@
+---
+title: "eBay Marketing Analytics"
+author: "DH Daniel Suh, Salil Redkar"
+date: '2018 10 26 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(tidyverse)
+```
+
+```{r}
+data = read.csv("eBayData.csv")
+```
+## A)
+```{r}
+data$rdate = as.Date(data$date, "%m/%d/%Y")
+```
+
+
+## B)
+```{r}
+mindata = data %>% arrange(rdate) %>% filter(isTreatmentPeriod == 1) 
+mindate = mindata$rdate[c(1)]
+mindate
+
+maxdata = data %>% arrange(desc(rdate)) %>% filter(isTreatmentPeriod == 1) 
+maxdate = maxdata$rdate[c(1)]
+maxdate
+```
+
+#### The control and treatment groups were differential, in their exposure or lack of exposure to advertisements in the treatment period. The both treatment groups were shown ads from April to 22nd May 2012. The treatment group(isTreatmentGroup = 1) was then not shown ads from 05/22/2012 to 07/22/2012(isTreatmentPeriod = 1), to understand the effect of visibility of ads on revenue.
+
+## C)
+### i)
+```{r}
+treatment_group = data %>% filter(isTreatmentGroup == 1) %>% arrange(rdate)
+```
+
+```{r}
+rev_treatment = lm(log(revenue) ~ isTreatmentPeriod, data = treatment_group)
+summary(rev_treatment)
+```
+
+### ii) 
+#### The intercept 10.94865 determines the baseline, or more specifically, the pre-treatment ln(revenue) value for the individuals in the treatment group. The coefficient on the ‘isTreatmentPeriod’ variable defines the effect of being in the treatment period affect the natural logarithm of revenue. It is evident from this coefficient that the exposure to ads results in the reduction of revenue by being in the treatment period. There is a reduction of 0.03940 in the ln(revenue) for the treatment group, when in the treatment period. This value is significant at the 95% percent level with a p-value of 0.04737. It is also obvious that there exists omitted variable bias in the regression, since the low R-square indicates that the treatment period variable explains very little of the total variance in the population, showing that there are possibly more variables that should be involved in the regression. This does not mean the regression is wrong, but just that the actual effect may not be as large as is observed.
+
+
+
+## D)
+### i)
+```{r}
+before_treatment = data %>% filter(isTreatmentPeriod == 0) %>% arrange(rdate)
+```
+
+```{r}
+reg_before_treatment = lm(log(revenue) ~ isTreatmentGroup, data = before_treatment)
+summary(reg_before_treatment)
+```
+
+### ii)
+#### In the pre-treatment period(isTreatmentPeriod = 0), there was no significant difference between the two groups with regards to their contribution to revenue. The negative value on the isTreatmentGroup variable shows an insignificant negative effect on the log of revenue. The randomization check is so that there is no bias in assigning the DMA’s to either the treatment or control group. This way the difference in the data if observed is due to the experimental conditions (whether in the control group or not, whether before or after treatment).
+
+
+## E)
+### i)
+```{r}
+after_treatment = data %>% filter(isTreatmentPeriod == 1) %>% arrange(rdate)
+```
+
+```{r}
+reg_after_treatment = lm(log(revenue) ~ isTreatmentGroup, data = after_treatment)
+summary(reg_after_treatment)
+```
+
+### ii) 
+#### The coefficient on the intercept indicates the ln(revenue) when for individuals in the Control Group(isTreatmentGroup = 0), for the post-treatment period, and the coefficient on the isTreatmentGroup indicates the effect of being in the Treatment group on lowering the revenue by a value of 0.007494. It seems there is little effect of advertising on affecting revenue using the given regression, as is seen by the high p-value of 0.7406 (seen by absence of *).
+
+
+### iii)
+#### The control group(isTreatmentGroup = 0) was not included in the regression in part c. Including it in the post-treatment period(isTreatmentPeriod = 1) regression in question e helped in the comparison between the groups. The control group acted as a baseline model to see if advertising affects revenue when compared to a population that did not see any ads.
+
+
+### iv)
+#### The extremely low R-squared shows us that the model does not fit the data at all. It is obvious that advertising has little to no effect on the final revenue generated from either group.
+
+
+## F)
+#### The ln(revenue) allows for answers in percentages. Percentages help in interpretation across different conditions for example log (revenue) will make more sense then revenue, when comparing a small company and big company.
+
+
+## G)
+#### From across the three regressions, it is evident that advertisement plays a small role in trying to increase revenue. In the case of eBay, it may be that customers have already made up their mind about which product to buy and the ad visibility does not sway their decision or convince them to make additional purchases. We cannot rule out the role of other variables contributing to revenue. Naturally, this effect might be different in case of an online retailer such as Amazon, where customers may be more sensitive to targeted advertising, but this will have to be supported by evidence from experimentation.

@@ -1,0 +1,734 @@
+---
+title: "Flights Project Interim Report II"
+author: "Group H: DH Daniel Suh , Debarati Mazumdar, Huixin Ma, Rong Wang"
+date: "11/17/2018"
+output: pdf_document
+---
+
+**Introduction**
+The dataset we have been giving is 2015 Flights data for the United States with a focus on delays and cancellations. We as a team will try to understand the delays and cancellations and the reason for the same. The variables on which we would want to base our study will be AIRLINE, MONTH, ORIGIN AIRPORT and DAY of the week. We hope that the analysis will be helpful for us to suggest reasons for delays/cancellations by Airline/ Airport and suggest corrective measures.
+In this project, we will analyze the following:- 
+1. Delay Analysis for flights using variables like - Airline, Airport, DAY of the week, etc 
+2. Cancellation Analysis and the reason and the airline with maximum cancellations
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(ggcorrplot)
+library(GGally)
+library(cowplot)
+library(knitr)
+library(scales)
+library(formattable)
+library(Hmisc)
+devtools::install_github('cttobin/ggthemr')
+library(ggthemr)
+```
+
+**Data Cleaning and Description**
+```{r}
+flights.df <- read.csv("flights.csv")
+#head(flights.df)
+#str(flights.df)
+```
+
+**a. Describe the variables**
+The dataset has 31 variables - YEAR(discrete,continous),MONTH(nominal),DAY(nominal),DAY_OF_WEEK,AIRLINE(discrete,nominal),
+FLIGHT_NUMBER(discrete,nominal),TAIL_NUMBER(discrete,nominal),ORIGIN_AIRPORT(discrete,nominal),
+DESTINATION_AIRPORT(discrete,nominal),SCHEDULED_DEPARTURE(discrete,continous),
+DEPARTURE_TIME(discrete,continous),DEPARTURE_DELAY(discrete,continous),TAXI_OUT(interval,continous),
+WHEELS_OFF(interval,continous),SCHEDULED_TIME(interval,continous),ELAPSED_TIME(interval,continous),
+AIR_TIME(interval,continous),DISTANCE(interval,continous),WHEELS_ON(interval,continous),
+TAXI_IN(interval,continous),SCHEDULED_ARRIVAL(interval,continous),
+ARRIVAL_TIME(interval,continous),ARRIVAL_DELAY(interval,continous),DIVERTED(discrete,nominal),
+CANCELLED(discrete,nominal),CANCELLATION_REASON(discrete,nominal),AIR_SYSTEM_DELAY(interval,continous),
+SECURITY_DELAY(interval,continous),AIRLINE_DELAY(interval,continous),LATE_AIRCRAFT_DELAY(interval,continous),
+WEATHER_DELAY(interval,continous)
+Distance is in miles and the time duration is in minutes. 
+
+**b. Steps to Data Cleaning**
+**Missing values pct**
+```{r }
+df.info <- function(x) {
+        dat  <- as.character(substitute(x))  ##data frame name
+        size <- format(object.size(x), units="Mb")  ##size of data frame in Mb
+        ##column information
+        column.info <- data.frame( column        = names(sapply(x, class)),
+                                   class         = sapply(x, class),
+                                   unique.values = sapply(x, function(y) length(unique(y))),
+                                   missing.count = colSums(is.na(x)),
+                                   missing.pct   = round(colSums(is.na(x)) / nrow(x) * 100, 2))
+        
+        row.names(column.info) <- 1:nrow(column.info)
+        
+        list(data.frame     = data.frame(name=dat, size=size),
+             dimensions     = data.frame(rows=nrow(x), columns=ncol(x)),
+             column.details = column.info)
+}
+df.info(flights.df)
+```
+To understand the percentage of missing values in the dataset, we run this code above and find that- 
+The columns number 27 to 31 have almost 82% data as NA, but those are columns related to a type of delay reason hence we keep the columns for analysis, we remove column number 6 and 7 since those are just flight and tail number. Thus we get our new working dataset called as flight1.df.
+```{r}
+flights1.df <- subset( flights.df , select = c (1:5,8:29,31))
+flights1.df$DEPARTURE_DELAY[is.na(flights1.df$DEPARTURE_DELAY)] <- round(mean(flights1.df$DEPARTURE_DELAY, na.rm = TRUE))
+flights1.df$ARRIVAL_DELAY[is.na(flights1.df$ARRIVAL_DELAY)] <- round(mean(flights1.df$ARRIVAL_DELAY, na.rm = TRUE))
+flights1.df$TAXI_OUT[is.na(flights1.df$TAXI_OUT)] <- round(mean(flights1.df$TAXI_OUT, na.rm = TRUE))
+flights1.df$TAXI_IN[is.na(flights1.df$TAXI_IN)] <- round(mean(flights1.df$TAXI_IN, na.rm = TRUE))
+flights1.df$WHEELS_OFF[is.na(flights1.df$WHEELS_OFF)] <- round(mean(flights1.df$WHEELS_OFF, na.rm = TRUE))
+flights1.df$WHEELS_ON[is.na(flights1.df$WHEELS_ON)] <- round(mean(flights1.df$WHEELS_ON, na.rm = TRUE))
+```
+Here we create our new dataset - flights1.df and also replace the NA with the mean of the column for 6 columns which will be used ahead in our analysis.
+
+**Data Type formats**
+```{r warning=FALSE, message = FALSE}
+flights1.df$YEAR<- as.factor(flights1.df$YEAR)
+flights1.df$MONTH<-as.factor(flights1.df$MONTH)
+flights1.df$DAY_OF_WEEK<-as.factor(flights1.df$DAY_OF_WEEK)
+flights1.df$AIRLINE<-as.factor(flights1.df$AIRLINE)
+flights1.df$ORIGIN_AIRPORT<- as.character(flights1.df$ORIGIN_AIRPORT)
+flights1.df$DESTINATION_AIRPORT <- as.character(flights1.df$DESTINATION_AIRPORT)
+flights1.df$SCHEDULED_DEPARTURE <- sprintf("%04d", flights1.df$SCHEDULED_DEPARTURE)
+flights1.df$SCHEDULED_DEPARTURE <- format(strptime(flights1.df$SCHEDULED_DEPARTURE, format="%H%M"),       format = "%H:%M")
+flights1.df$SCHEDULED_TIME <- sprintf("%04d", flights1.df$SCHEDULED_TIME)
+flights1.df$SCHEDULED_TIME <- format(strptime(flights1.df$SCHEDULED_TIME, format="%H%M"), format = "%H:%M")
+flights1.df$SCHEDULED_ARRIVAL <- sprintf("%04d", flights1.df$SCHEDULED_ARRIVAL)
+flights1.df$SCHEDULED_ARRIVAL <- format(strptime(flights1.df$SCHEDULED_ARRIVAL, format="%H%M"), format = "%H:%M")
+flights1.df$ARRIVAL_TIME <- sprintf("%04d", flights1.df$ARRIVAL_TIME)
+flights1.df$ARRIVAL_TIME <- format(strptime(flights1.df$ARRIVAL_TIME, format="%H%M"), format = "%H:%M")
+```
+The columns YEAR, MONTH, DAY_OF WEEK and AIRLINE  are changed to factors and the TIME format variables are changed from int to data type time ( hh: mm). The CANCELLATION REASON, CANCELLED AND DIVERTED are already type factor.
+
+**Overall Summary**
+To start our analysis, we first create a table with statistical values for all the AIRLINES to get a broader perspective on the dataset.
+```{r}
+install.packages("dplyr") 
+flightsummary <- flights1.df %>% 
+  group_by(AIRLINE) %>%
+  dplyr::summarise(Count = n(),
+            mean_ARRIVAL_DELAY = mean(ARRIVAL_DELAY),
+            median_ARRIVAL_DELAY = median(ARRIVAL_DELAY),
+            min_ARRIVAL_DELAY = min(ARRIVAL_DELAY),
+            max_ARRIVAL_DELAY = max(ARRIVAL_DELAY),
+            mean_DEPARTURE_DELAY = mean(DEPARTURE_DELAY),
+            median_DEPARTURE_DELAY = median(DEPARTURE_DELAY),
+            min_DEPARTURE_DELAY = min(DEPARTURE_DELAY),
+            max_DEPARTURE_DELAY = max(DEPARTURE_DELAY))%>%
+  arrange(desc(Count))
+```
+As from the table above it is clear that WN has the highest number of flights but they do not have the highest mean of arrival delay or departure delay, the highest mean of arrival delay is for Airlines - NK and F9 which have fewer flights, but delays are significant
+Airline DL and AS have the lowest mean arrival delay but AS has fewer flights as compared to the total flights for the year
+Airline NK has the highest departure delay amongst all of the airlines, thus in spite of having fewer flights the airline has the maximum delays.
+Airline AS and HA have the least mean delay for departure, but they also have a significantly lower count of flights.
+Thus, this will be an interesting start to see the behavior across more variables for the Airlines in our visualizations
+
+**Delay Analysis**
+We will study delay in flights basis 4 variables - by the airline, overall delay, by airports, a day of the week and month
+plot 1 - Departure Delay by Airlines
+```{r pressure, echo=FALSE}
+ggthemr_reset()
+ggplot(subset(flights1.df, DEPARTURE_DELAY>=0), aes(x=reorder(AIRLINE, DEPARTURE_DELAY, FUN=median), y= DEPARTURE_DELAY, fill=AIRLINE)) +
+  geom_boxplot() +
+  coord_cartesian(ylim=c(0,50)) +
+  labs(x = 'Airline', y = 'Departure Delay',title = 'Departure Delay by Airlines')
+```
+In the above plot, it is evident that NK has the highest dealt with the highest mean followed by F9, but these two airlines do not have a high count of flights hence our focus should be on airlines - WN, DL, AA - the top 3 airlines as per the number. WN and AA are somewhere in the middle, and DL has one of the lowest delays. The average delay is 4.04 minutes on an overall basis.
+
+plot 2 - Arrival delay by airlines
+```{r}
+ggplot(subset(flights1.df, ARRIVAL_DELAY>=0), aes(x=reorder(AIRLINE, ARRIVAL_DELAY, FUN=median), y=ARRIVAL_DELAY, fill=AIRLINE)) +
+  geom_boxplot() +
+  coord_cartesian(ylim=c(0,50)) +
+  labs(x = 'Airline', y = 'Arrival Delay', title = 'Arrival Delay by Airlines')
+```
+
+In the above plot it is showing us the arrival delay by airline, arrival delay and departure delay are highly correlated, and the graph also speaks the same, however if we see DL and AA have higher arrival delays as compared to departure delays, thus we can say that not all airlines have similar behavior for both the delays.
+
+```{r}
+flights1.df <- subset( flights.df , select = c (1:5,8:29,31))
+flights1.df$DEPARTURE_DELAY[is.na(flights1.df$DEPARTURE_DELAY)] <- round(mean(flights1.df$DEPARTURE_DELAY, na.rm = TRUE))
+flights1.df$ARRIVAL_DELAY[is.na(flights1.df$ARRIVAL_DELAY)] <- round(mean(flights1.df$ARRIVAL_DELAY, na.rm = TRUE))
+flights1.df$TAXI_OUT[is.na(flights1.df$TAXI_OUT)] <- round(mean(flights1.df$TAXI_OUT, na.rm = TRUE))
+flights1.df$TAXI_IN[is.na(flights1.df$TAXI_IN)] <- round(mean(flights1.df$TAXI_IN, na.rm = TRUE))
+flights1.df$WHEELS_OFF[is.na(flights1.df$WHEELS_OFF)] <- round(mean(flights1.df$WHEELS_OFF, na.rm = TRUE))
+flights1.df$WHEELS_ON[is.na(flights1.df$WHEELS_ON)] <- round(mean(flights1.df$WHEELS_ON, na.rm = TRUE))
+```
+
+plot 3 - Departure delay by Month
+```{r}
+flights1.df$MONTH[flights1.df$MONTH == 1]= 'Jan'
+flights1.df$MONTH[flights1.df$MONTH == 2]= 'Feb'
+flights1.df$MONTH[flights1.df$MONTH == 3]= 'Mar'
+flights1.df$MONTH[flights1.df$MONTH == 4]= 'Apr'
+flights1.df$MONTH[flights1.df$MONTH == 5]= 'May'
+flights1.df$MONTH[flights1.df$MONTH == 6]= 'Jun'
+flights1.df$MONTH[flights1.df$MONTH == 7]= 'Jul'
+flights1.df$MONTH[flights1.df$MONTH == 8]= 'Aug'
+flights1.df$MONTH[flights1.df$MONTH == 9]= 'Sept'
+flights1.df$MONTH[flights1.df$MONTH == 10]= 'Oct'
+flights1.df$MONTH[flights1.df$MONTH == 11]= 'Nov'
+flights1.df$MONTH[flights1.df$MONTH == 12]= 'Dec'
+monthdelay = subset(flights1.df, flights1.df$DEPARTURE_DELAY >0)
+monthdelay$MONTH<- as.factor(monthdelay$MONTH)
+monthdelay$DEPARTURE_DELAY<- lapply(monthdelay$DEPARTURE_DELAY,function(x)
+  ifelse(is.na(x),mean(x,na.rm = TRUE),x))
+monthdelay$DEPARTURE_DELAY<- as.numeric(monthdelay$DEPARTURE_DELAY)
+ ggthemr("dust")
+ ggplot( monthdelay, aes(x = monthdelay$MONTH, y= monthdelay$DEPARTURE_DELAY))+
+     ggtitle("Delays by Month")+
+     labs(x = "Month of the year - 2015", y = " Departure Delay in minutes")+
+     geom_bar(stat = "identity")
+    
+```
+We further concentrate the study towards the Departure delay, It is clear that summer month - June, Jul, and Aug have a higher delay since these are the months when the people travel more. Thus the airlines have more operational flights, and people also take their holidays during this season. 
+Another evident period is the winter - Dec, Jan, and Feb; this can be because of the holidays and also for the weather changes and storms.
+
+plot 4 -Departure Delay by day of the week
+```{r}
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 1] = 'Mon'
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 2] = 'Tues'
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 3] = 'Wed'
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 4] = 'Thurs'
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 5] = 'Fri'
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 6] = 'Sat'
+flights1.df$DAY_OF_WEEK[flights1.df$DAY_OF_WEEK == 7] = 'Sun'
+weekdelay = subset(flights1.df, flights1.df$DEPARTURE_DELAY >0)
+weekdelay$DEPARTURE_DELAY<- lapply(weekdelay$DEPARTURE_DELAY,function(x)
+  ifelse(is.na(x),mean(x,na.rm = TRUE),x))
+weekdelay$DEPARTURE_DELAY<- as.numeric(weekdelay$DEPARTURE_DELAY)
+weekdelay$DAY_OF_WEEK<- as.factor(weekdelay$DAY_OF_WEEK)
+ ggthemr("flat")
+ ggplot( data = weekdelay, aes(x = weekdelay$DAY_OF_WEEK , y = weekdelay$DEPARTURE_DELAY,fill = weekdelay$DAY_OF_WEEK))+
+     labs( title =" Departure Delay by Day of Week", x = "Days of the week", y = "Departure Delay")+
+     geom_bar( stat = "identity")+
+   theme(legend.title = element_blank())
+```
+The above plot shows us that the start and end of the week - Mon and Thurs have more delays as people visit families over weekend hence they travel, and also consultants go Mon to Thurs for work too. 
+Sun, Tues, and Wed have almost similar delay pattern.
+
+plot 5 - Flights by Months According to Flights Status
+```{r}
+flights1.df$status<-'ON TIME'
+flights1.df$status[flights1.df$DEPARTURE_DELAY>0] <-'DEPARTURE DELAY'
+flights1.df$status[flights1.df$CANCELLED==1] <-'CANCELLED FLIGHTS'
+flights1.df$status[flights1.df$ARRIVAL_DELAY>0 & (flights1.df$ARRIVAL_DELAY-flights1.df$DEPARTURE_DELAY)>0 & flights1.df$DEPARTURE_DELAY>0] <-'DEPR & ARVL_DELAY'
+flights1.df$status[flights1.df$ARRIVAL_DELAY>0 & flights1.df$DEPARTURE_DELAY<=0] <-'ARRIVAL_DELAY'
+flights1.df$status<-factor(flights1.df$status)
+ggthemr("dust")
+ggplot(flights1.df,aes(x=MONTH,fill=status),binwidth=12) + 
+  labs( title ="Flights by Months According to Flights Status" , x = "Month", y = "Flight status by count")+
+  geom_bar(position = "fill")+
+  legend_right()
+```
+In the above plot, we try to see what type of delays are evident across the different month, with the focus more on the summer and winter season(as analyzed in plot 3). Amongst the winter months- Feb has both arrival and dep delay as the highest, followed by Jan and Jun. 
+Fall months- Sept and Oct have the highest on-time performance, this can be because the weather is better or fewer flights operate as compared to Winter and Summer.
+
+plot 6 - Flight status by Airline
+```{r}
+flights1.df$status<-'ON TIME'
+flights1.df$status[flights1.df$DEPARTURE_DELAY>0] <-'DEPARTURE DELAY'
+flights1.df$status[flights1.df$CANCELLED==1] <-'CANCELLED FLIGHTS'
+flights1.df$status[flights1.df$ARRIVAL_DELAY>0 & (flights1.df$ARRIVAL_DELAY-flights1.df$DEPARTURE_DELAY)>0 & flights1.df$DEPARTURE_DELAY>0] <-'DEPR & ARVL_DELAY'
+flights1.df$status[flights1.df$ARRIVAL_DELAY>0 & flights1.df$DEPARTURE_DELAY<=0] <-'ARRIVAL_DELAY'
+flights1.df$status<-factor(flights1.df$status)
+ggthemr("flat")
+ggplot(flights1.df,aes(x=AIRLINE,fill=status),binwidth=12) + 
+  labs(title ="Flight status by Airline ", x = "Airline", y ="Status by count")+
+  geom_bar(position = "fill") 
+```
+In the above plot, we extend the analysis of airlines by understanding their performance a little deeper basis their flight status. Thus now we can conclude that Airline AS and DL have the highest on-time performance.
+UA and WN have highest dep delays, while NK and F9 have the most top departure and arrival delay.
+Thus till now for bigger airlines, DL has shown the best performance.
+
+plot 7 - Overall Delay by Departure Hour
+```{r}
+flights1.df$DEP_HOUR <- NA
+flights1.df<-subset(flights1.df, !(is.na(flights1.df$DEPARTURE_TIME)))
+flights1.df$DEP_HOUR <- as.integer(flights1.df$DEPARTURE_TIME / 100)
+flights1.df$LATENCY <- NA
+flights1.df$LATENCY <- case_when(flights1.df$ARRIVAL_DELAY <= 5 ~"On Time (0-5 mins)",
+  flights1.df$ARRIVAL_DELAY > 5 & flights1.df$ARRIVAL_DELAY <= 15 ~"Small Delay (5-15 mins)",
+  flights1.df$ARRIVAL_DELAY > 15 ~ "Large Delay (> 15 mins)" )
+ggthemr("fresh", layout = 'clean')
+ggplot(data=flights1.df, aes(x=factor(flights1.df$DEP_HOUR),fill=factor(flights1.df$LATENCY))) + 
+  geom_histogram(stat = "Count",position = "dodge") +
+  labs(title="Overall Delay by Departure Hour",x="Departure Hours", y="Delays") +
+  scale_x_discrete()
+```
+The plot shows us that how during a day the delays spread out as compared to on-time flights. For simplicity, we divide the departure and arrival delay into massive delays >15 min, small delays ( 5 to 15 mins) and on time flights ( 0 to 5mins). We see that large maximum delays happen between the 14th to the 21st hour of departure. 
+The smallest delays are spread out evenly from 6th to 20th hour of departure. On time is at peak during the different departure hours ( 5th and 6th hour and 17th hour). This graph is helpful as if we plot this airport. 
+
+**Understanding TAxi in/out and Wheels On/Off*
+```{r}
+taxiInAirport<-subset(flights1.df,!is.na(flights1.df$TAXI_IN)) %>%
+  group_by(DESTINATION_AIRPORT) %>%
+  dplyr::summarise(mean_taxiIn=mean(TAXI_IN), count_of_fly=n()) %>%
+  arrange(DESTINATION_AIRPORT)
+
+cor.test(taxiInAirport$mean_taxiIn,taxiInAirport$count_of_fly)
+
+taxiOutAirport<-subset(flights1.df,!is.na(flights1.df$TAXI_OUT)) %>%
+  group_by(ORIGIN_AIRPORT) %>%
+  dplyr::summarise(mean_taxiOut=mean(TAXI_OUT), count_of_fly=n()) %>%
+  arrange(ORIGIN_AIRPORT)
+
+cor.test(taxiOutAirport$mean_taxiOut,taxiOutAirport$count_of_fly)
+```
+Since our study is focused more on dep delays, understanding Taxi In time is essential since, as the count of flights increase taxi in time increases and this is the crucial factor for large airports and airports which plan to expand since the delays are significant because of this factor( high correlation of 0.544). The taxi_in is large also because the count of flights is high and there are fewer runways or fewer gates to taxi in. 
+
+
+**Diverted Analysis**
+plot 8 - Diverted flights Analysis
+```{r}
+flights1.df$DIVERTED[flights1.df$DIVERTED == 0] = 'No'
+flights1.df$DIVERTED[flights1.df$DIVERTED == 1] = 'Yes'
+ggthemr("fresh")
+ggplot(flights1.df ,aes( x = flights1.df$AIRLINE, fill =factor(flights1.df$DIVERTED)))+
+          geom_bar( stat= "count",position = "dodge",col = "blue")+
+          scale_y_log10()+
+          labs(title ="Status of Diverted Flights by Airline", x= "AIRLINE", y = "Count",fill='Diverted or Not')
+```
+In the above plot, we can see that the total diverted flights are highest for WN and the least is for HA and F9. This plot is undoubtedly an excellent way to say that more the number of flights the % of diverted flights increase.
+
+**Cancellation Analysis**
+plot 9 - Cancellation Analysis
+```{r}
+flights1.df$CANCELLED[flights1.df$CANCELLED == 0] = 'No'
+flights1.df$CANCELLED[flights1.df$CANCELLED == 1] = 'Yes'
+ggthemr("flat")
+ggplot(flights1.df ,aes( x = flights1.df$AIRLINE, fill =factor(flights1.df$CANCELLED)))+
+          geom_bar( stat= "count",position = "dodge")+
+          scale_y_log10()+
+          labs( title ="Status of Cancelled Flights by Airline", x= "AIRLINE", y = "Count" ,fill='Cancelled or Not')
+```
+In this graph, we can see that the % of cancellation is highest for OO and MQ, whereas the lowest is for HA and VX, but these airlines also have fewer operational flights
+
+plot 10 - Cancellation Reason by Airline 
+```{r}
+flights1.df$CANCELLATION_REASON[flights1.df$CANCELLATION_REASON == ""] <- NA
+CancelledSubset = subset(flights1.df, flights1.df$CANCELLATION_REASON != 'NA')
+CancelledSubset$CANCELLATION_REASON <- as.factor(CancelledSubset$CANCELLATION_REASON)
+levels(CancelledSubset$CANCELLATION_REASON) <- c("","Carrier","Weather","National Air System","Security")
+ggthemr("dust")
+ggplot(CancelledSubset, aes(x = CancelledSubset$AIRLINE, fill= factor(CANCELLATION_REASON)))+
+       geom_bar()+
+       labs(title = "Cancellation Reason by Airline", x= "Airline", y ="Count")+
+       scale_y_log10()
+```
+We have four primary reasons for flight cancellations, and in the above plot, we can say that maximum cancellations happen because of Weather and carrier. Weather is a common reason since during winters there is snow across the east coast and storms across the country which makes flights delayed. The second most frequent reason is the carrier which means a fault in the engine or some machinery which cancels intake off. Thus as an Airline company, the error which can be reduced is the Carrier error.
+
+```{r}
+ggthemr_reset()
+airtimedelayanalysis = subset(flights.df, flights.df$AIR_SYSTEM_DELAY != " ")
+airtimedelayanalysis$AIR_SYSTEM_DELAY <- as.numeric(airtimedelayanalysis$AIR_SYSTEM_DELAY)
+ggplot(airtimedelayanalysis, aes(x= airtimedelayanalysis$AIRLINE, y= airtimedelayanalysis$AIR_SYSTEM_DELAY, fill = AIRLINE)) +
+geom_bar(stat = "identity")+
+labs(title = "Airtime delay by Airline", x = "Airline", y= "Airtime delay")
+```
+
+```{r}
+ggthemr_reset()
+securitydelayanalysis = subset(flights.df, flights.df$SECURITY_DELAY != " ")
+securitydelayanalysis$AIR_SYSTEM_DELAY <- as.numeric(securitydelayanalysis$SECURITY_DELAY)
+ggplot(securitydelayanalysis, aes(x= securitydelayanalysis$AIRLINE, y= securitydelayanalysis$SECURITY_DELAY, fill = AIRLINE)) +
+  geom_bar(stat = "identity")+
+  labs(title = "Security delay by Airline", x = "Airline", y= "Security delay")
+```
+
+```{r}
+ggthemr_reset()
+airlinedelayanalysis = subset(flights.df, flights.df$AIRLINE_DELAY != " ")
+airlinedelayanalysis $AIRLINE_DELAY <- as.numeric(airlinedelayanalysis $AIRLINE_DELAY)
+ggplot(airlinedelayanalysis , aes(x= airlinedelayanalysis $AIRLINE, y= airlinedelayanalysis$AIRLINE_DELAY, fill = AIRLINE)) +
+  geom_bar(stat = "identity")+
+  labs(title = "Carrier delay by Airline", x = "Airline", y= "Carrier delay")
+```
+
+```{r}
+ggthemr_reset()
+weatherdelayanalysis = subset(flights.df, flights.df$WEATHER_DELAY != " ")
+weatherdelayanalysis$WEATHER_DELAY <- as.numeric(weatherdelayanalysis$WEATHER_DELAY)
+ggplot(weatherdelayanalysis, aes(x= weatherdelayanalysis$AIRLINE,y=weatherdelayanalysis$WEATHER_DELAY,                                   fill = AIRLINE)) +
+  geom_bar(stat = "identity")+
+  labs(title = "Weather delay by Airline", x = "Airline", y= "Weather delay")
+```
+
+**Statistical Analysis**
+```{r warning=FALSE}
+cor(flights1.df$DEPARTURE_DELAY, flights1.df$ARRIVAL_DELAY)
+cor(flights1.df$DEPARTURE_DELAY, flights1.df$TAXI_OUT)
+cor(flights1.df$ARRIVAL_DELAY, flights1.df$TAXI_IN)
+chisq.test(table(flights1.df$DEPARTURE_DELAY, flights1.df$ARRIVAL_DELAY))
+```
+According to the correlation, we can see that departure_delay is highly correlated with arrival_delay. We may conclude that these two variable are not independent but associated. In order to further confirm it, we run the chi-square test to check whether the departure_delay and arrival_delay are independent or not.
+The null hypothesis: departure_delay and arrival_delay are independent
+The alternative hypothesis: departure_delay and arrival_delay are not independent
+Based on our test result, we reject the null hypothesis since p-value is smaller than the critical value at 95% confidence level. Therefore, departure_delay and arrival_delay are not independent and associated, which is consistent with our correlation test.
+
+```{r echo=FALSE, results='hide'}
+t.test(flights1.df[flights1.df$AIRLINE == "NK",]$DEPARTURE_DELAY, flights1.df[flights1.df$AIRLINE == "F9",]$DEPARTURE_DELAY, paired = FALSE)
+t.test(flights1.df[flights1.df$AIRLINE == "HA",]$DEPARTURE_DELAY, flights1.df[flights1.df$AIRLINE == "AS",]$DEPARTURE_DELAY, paired = FALSE)
+t.test(flights.df[flights.df$MONTH == 6,]$DEPARTURE_DELAY, flights.df[flights.df$MONTH == 7,]$DEPARTURE_DELAY, paired = FALSE)
+t.test(flights.df[flights.df$MONTH == 9,]$DEPARTURE_DELAY, flights.df[flights.df$MONTH == 10,]$DEPARTURE_DELAY, paired = FALSE)
+t.test(flights.df[flights.df$DAY_OF_WEEK == 1,]$DEPARTURE_DELAY, flights.df[flights.df$DAY_OF_WEEK == 4,]$DEPARTURE_DELAY, paired = FALSE)
+t.test(flights.df[flights.df$DAY_OF_WEEK == 6,]$DEPARTURE_DELAY, flights.df[flights.df$DAY_OF_WEEK == 7,]$DEPARTURE_DELAY, paired = FALSE)
+```
+
+**t-test Table summary**
+```{r echo=FALSE}
+output <- data_frame(`Compare Group` = c("NK and F9", "HA and AS", "Jun and Jul", "Sept and Oct",  "Monday and Thursday","Saturday and Sunday"),
+           `Mean for a` = c(15.84, 0.50, 13.91, 4.84, 10.84,7.85),
+            `Mean for b` = c(13.35 , 1.81, 11.38, 5.00  ,9.95,9.40 ),
+           `p-value` = c(2.2e-16,2.2e-16, 2.2e-16, 0.009473, 2.2e-16,2.2e-16))
+formattable(output)
+```
+In the previous part, we plot the graph of delay for different airlines, different month period, and for the different day of the week. Based on our figure, for each variable, we pick the top two with the most delay and the bottom two with the least delay and run the two-sample t-test to compare their mean delay time. We want to check if there is a significant difference between their mean delay. We only focus on the departure delay in this part since the departure_delay and arrival_delay are highly correlated.
+The null hypothesis: Mean departure delay time for Airline a/Month a/Day of a week a = Mean departure delay time for Airline b/Month b/Day of week b. 
+Alternate hypothesis: Mean departure delay time for Airline a/Month a/Day of a week a != Mean departure delay time for Airline b/Month b/Day of week b. 
+Taking the airlines as the example, NK and F9 are the two airlines with the most delay shown on our graph. The t-test results with a significant p-value indicate that there is a substantial difference in their mean delay time. There is also a considerable difference in the mean delay time for HA and AS (two airlines with the least delay shown on the graph). The same applies to the month period and day of the week. For each compared group, we reject the null hypothesis based on a significant p-value.
+In conclusion, when people want to take a flight with a minimum delay, we suggest that to fly with Hawaiian Airlines and to avoid Spirit Airlines. Also when people consider a travel plan, September might be right timing to go out since it is the month with the least delay within a year. Besides, flying on Saturday also is a way to avoid delay.
+
+
+
+
+
+***Airline regression*** 
+```{r}
+flights <- flights.df
+summary(flights)
+```
+
+# In order to prevent the situation where a large amount of data is generated when the month is dummy variable, the month column is quadrupled.
+```{r}
+#create dataset for regression 
+airline_departure_delay1 <- subset(flights.df , select = c(2, 4:5, 12:14, 16:20, 23, 25)) 
+airline_departure_delay1
+
+airline_departure_delay1 <- airline_departure_delay1 %>%
+  mutate(Season =  
+      ifelse(as.numeric(MONTH) >= 7 & as.numeric(MONTH) <= 9, 3, 
+      ifelse(as.numeric(MONTH) >= 4 & as.numeric(MONTH) <= 6, 2,
+     ifelse(as.numeric(MONTH) >= 1 & as.numeric(MONTH) <= 3, 1, 4))))
+```
+
+```{r}
+#Replace NAs with mean 
+airline_departure_delay1$DEPARTURE_DELAY[is.na(airline_departure_delay1$DEPARTURE_DELAY)] <- round(mean(airline_departure_delay1$DEPARTURE_DELAY, na.rm = TRUE))
+airline_departure_delay1$ARRIVAL_DELAY[is.na(airline_departure_delay1$ARRIVAL_DELAY)] <- round(mean(airline_departure_delay1$ARRIVAL_DELAY, na.rm = TRUE))
+airline_departure_delay1$TAXI_OUT[is.na(airline_departure_delay1$TAXI_OUT)] <- round(mean(airline_departure_delay1$TAXI_OUT, na.rm = TRUE))
+airline_departure_delay1$TAXI_IN[is.na(airline_departure_delay1$TAXI_IN)] <- round(mean(airline_departure_delay1$TAXI_IN, na.rm = TRUE))
+airline_departure_delay1$WHEELS_OFF[is.na(airline_departure_delay1$WHEELS_OFF)] <- round(mean(airline_departure_delay1$WHEELS_OFF, na.rm = TRUE))
+airline_departure_delay1$WHEELS_ON[is.na(airline_departure_delay1$WHEELS_ON)] <- round(mean(airline_departure_delay1$WHEELS_ON, na.rm = TRUE))
+airline_departure_delay1$ELAPSED_TIME[is.na(airline_departure_delay1$ELAPSED_TIME)] <- round(mean(airline_departure_delay1$ELAPSED_TIME, na.rm = TRUE))
+airline_departure_delay1$AIR_TIME[is.na(airline_departure_delay1$AIR_TIME)] <- round(mean(airline_departure_delay1$AIR_TIME, na.rm = TRUE))
+```
+
+```{r}
+#rearrange dataset
+airline_dep_delay1 = airline_departure_delay1 %>% 
+  group_by(AIRLINE, DAY_OF_WEEK, Season,CANCELLED) %>%
+  dplyr::summarise(Avg_Departure_Delay = mean(DEPARTURE_DELAY), Avg_Arrival_Delay = mean(ARRIVAL_DELAY),Avg_Taxi_In = mean(TAXI_IN),Avg_Taxi_Out =  mean(TAXI_OUT), Avg_Elapsed_Time = mean(ELAPSED_TIME), Avg_Air_Time = mean(AIR_TIME),Avg_Distance = mean(DISTANCE), Avg_Wheels_On = mean(WHEELS_ON), Avg_Wheels_Off = mean(WHEELS_OFF), Avg_Departure_Delay = mean(DEPARTURE_DELAY))
+```
+
+
+The K-means algorithm is an algorithm for grouping the given data into k clusters. The K-means algorithm works by minimizing the dispersion of the distance between each cluster. The purpose of clustering is to group observations with high similarities into a large number of groups so that the similarities among the members in the same group are very high, but they have little similarity with members of other groups. Through clustering, we will look at the basic patterns in the dataset and see if we can create groups with specific properties.
+
+
+To run the Kmean model, all variables must be numerically processed. Therefore, each factor variable is dummied using model.matrix function and scaled it.
+```{r}
+#K-means clustering for baseline regression 
+airline_departure_delay1_num <- model.matrix(~ factor(AIRLINE) + factor(DAY_OF_WEEK) + factor(Season)+ Avg_Departure_Delay + Avg_Arrival_Delay+Avg_Distance+Avg_Elapsed_Time, data = airline_dep_delay1)
+
+airline_scaled_data1 = scale(airline_departure_delay1_num)
+
+seg.summ <- function(data, groups) {
+  aggregate(data, list(groups), function(x) mean(as.numeric(x)))  
+}
+k.max <- 20
+wss <- sapply(1:k.max, 
+              function(k){kmeans(airline_scaled_data1[, -1], k, nstart=50, iter.max = 20)$tot.withinss})
+wss
+
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+# Find the K-means groups
+
+# To find the optimal number of clusters in kmean, we need to use the elbow method. The elbow method is a graph of the cost function with the change in k value. As k increases, the average distortion decreases. This is because as members of each cluster decrease, all members become closer to the center. However, as the value of k increases, the improvement of the distortion becomes steady. At some point, however, the improvement of the average distortion sharply deteriorates even if the value of k increases. It is called the elbow that the decrease of the distortion improvement with the increase of the k value becomes the maximum, and it can be regarded as the optimum point to be no longer required to increase the cluster.
+```{r}
+set.seed(96743)        # because starting assignments are random
+seg.k14 <- kmeans(airline_scaled_data1[,-1], centers=14)
+
+seg.summ(airline_departure_delay1_num, seg.k14$cluster)
+```
+
+```{r}
+#baseline linear regression
+lm_departuredelay1.0= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(AIRLINE)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Elapsed_Time, data=airline_dep_delay1)
+summary(lm_departuredelay1.0)
+anova(lm_departuredelay1.0)
+```
+
+```{r}
+#Baseline regression + clustering 
+lm_departuredelay1.1= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(AIRLINE)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Elapsed_Time+seg.k14$cluster, data=airline_dep_delay1)
+
+summary(lm_departuredelay1.1)
+anova(lm_departuredelay1.1)
+```
+
+```{r}
+#K-means clustering for regression with ommited variables  
+airline_departure_delay2_num <- model.matrix(~ factor(AIRLINE) + factor(DAY_OF_WEEK) + factor(Season) + Avg_Departure_Delay + Avg_Arrival_Delay+Avg_Distance+Avg_Elapsed_Time+Avg_Taxi_In+Avg_Taxi_Out+Avg_Wheels_On+Avg_Wheels_Off+Avg_Air_Time, data = airline_dep_delay1)
+airline_scaled_data2 = scale(airline_departure_delay2_num)
+seg.summ <- function(data, groups) {
+  aggregate(data, list(groups), function(x) mean(as.numeric(x)))  
+}
+k.max <- 20
+wss <- sapply(1:k.max, 
+              function(k){kmeans(airline_scaled_data1[, -1], k, nstart=50, iter.max = 20)$tot.withinss})
+wss
+
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+# Find the K-means groups
+```{r}
+set.seed(96743)        # because starting assignments are random
+seg.k15 <- kmeans(airline_scaled_data1[,-1], centers=15)
+
+seg.summ(airline_departure_delay1_num, seg.k15$cluster)
+```
+
+```{r}
+#Omitted Variables
+lm_departuredelay1.3= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(AIRLINE)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Taxi_In+Avg_Taxi_Out+Avg_Wheels_On+Avg_Wheels_Off+Avg_Elapsed_Time+Avg_Air_Time, data=airline_dep_delay1)
+summary(lm_departuredelay1.3)
+anova(lm_departuredelay1.3)
+
+```
+
+```{r}
+# Omitted variables+clustering 
+lm_departuredelay1.4= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(AIRLINE)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Taxi_In+Avg_Taxi_Out+Avg_Wheels_On+Avg_Wheels_Off+Avg_Elapsed_Time+Avg_Air_Time+seg.k15$cluster, data=airline_dep_delay1)
+summary(lm_departuredelay1.4)
+anova(lm_departuredelay1.4)
+```
+
+```{r}
+#logistic regression 
+glm_cancelled = glm(formula = factor(CANCELLED) ~ factor(AIRLINE)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Elapsed_Time, family=binomial, data= airline_dep_delay1)
+summary(glm_cancelled)
+
+```
+
+**Airport regression**
+
+In order to prevent the situation where a large amount of data is generated when the month is dummy variable, the month column is quadrupled.
+```{r}
+#create dataset for regression 
+airport_departure_delay1 <- subset(flights.df , select = c(2, 4, 8, 12:14, 16:20, 23, 25)) 
+airport_departure_delay1
+
+airport_departure_delay1 <- airport_departure_delay1 %>%
+  mutate(Season =  
+      ifelse(as.numeric(MONTH) >= 7 & as.numeric(MONTH) <= 9, 3, 
+      ifelse(as.numeric(MONTH) >= 4 & as.numeric(MONTH) <= 6, 2,
+     ifelse(as.numeric(MONTH) >= 1 & as.numeric(MONTH) <= 3, 1, 4))))
+```
+
+As origin airport column is mixed with character and numbers, which is a duplicate, we removed the rows with the number to reduce the duplication.  
+```{r}
+airport_departure_delay1$ORIGIN_AIRPORT <- as.character(airport_departure_delay1$ORIGIN_AIRPORT)
+
+Un1 <- unique(airport_departure_delay1$ORIGIN_AIRPORT)
+airport_length <- data.frame(ORIGIN_AIRPORT=Un1, x=nchar(Un1))
+
+airport_length <- airport_length %>% filter(x < 4)
+airport_departure_delay1 <- merge(airport_departure_delay1, airport_length)
+```
+
+# split the data set into five sections based on the plot of the number of flights. 
+```{r}
+flights_num <- airport_departure_delay1 %>% group_by(ORIGIN_AIRPORT) %>% tally %>% arrange(desc(n))
+airport_departure_delay1 <- merge(airport_departure_delay1, flights_num)
+
+airport_departure_delay1 <- airport_departure_delay1 %>%
+  mutate(flight_num = 
+      ifelse (n >= 1 & n <= 100000, 1, 
+             ifelse (n >= 100001 & n <= 200000, 2,
+             ifelse (n >= 200001 & n <= 300000, 3, 4))))
+```
+
+
+```{r}
+#Replace NAs with mean 
+airport_departure_delay1$DEPARTURE_DELAY[is.na(airport_departure_delay1$DEPARTURE_DELAY)] <- round(mean(airport_departure_delay1$DEPARTURE_DELAY, na.rm = TRUE))
+airport_departure_delay1$ARRIVAL_DELAY[is.na(airport_departure_delay1$ARRIVAL_DELAY)] <- round(mean(airport_departure_delay1$ARRIVAL_DELAY, na.rm = TRUE))
+airport_departure_delay1$TAXI_OUT[is.na(airport_departure_delay1$TAXI_OUT)] <- round(mean(airport_departure_delay1$TAXI_OUT, na.rm = TRUE))
+airport_departure_delay1$TAXI_IN[is.na(airport_departure_delay1$TAXI_IN)] <- round(mean(airport_departure_delay1$TAXI_IN, na.rm = TRUE))
+airport_departure_delay1$WHEELS_OFF[is.na(airport_departure_delay1$WHEELS_OFF)] <- round(mean(airport_departure_delay1$WHEELS_OFF, na.rm = TRUE))
+airport_departure_delay1$WHEELS_ON[is.na(airport_departure_delay1$WHEELS_ON)] <- round(mean(airport_departure_delay1$WHEELS_ON, na.rm = TRUE))
+airport_departure_delay1$ELAPSED_TIME[is.na(airport_departure_delay1$ELAPSED_TIME)] <- round(mean(airport_departure_delay1$ELAPSED_TIME, na.rm = TRUE))
+airport_departure_delay1$AIR_TIME[is.na(airport_departure_delay1$AIR_TIME)] <- round(mean(airport_departure_delay1$AIR_TIME, na.rm = TRUE))
+```
+
+```{r}
+#rearrange dataset
+airport_dep_delay1 = airport_departure_delay1 %>% 
+  group_by(DAY_OF_WEEK, Season, flight_num, CANCELLED) %>%
+  dplyr::summarise(Avg_Departure_Delay = mean(DEPARTURE_DELAY), Avg_Arrival_Delay = mean(ARRIVAL_DELAY),Avg_Taxi_In = mean(TAXI_IN),Avg_Taxi_Out =  mean(TAXI_OUT), Avg_Elapsed_Time = mean(ELAPSED_TIME), Avg_Air_Time = mean(AIR_TIME),Avg_Distance = mean(DISTANCE), Avg_Wheels_On = mean(WHEELS_ON), Avg_Wheels_Off = mean(WHEELS_OFF), Avg_Departure_Delay = mean(DEPARTURE_DELAY))
+```
+
+```{r}
+#k-means clustering with baseline regresssion 
+airport_departure_delay1_num <- model.matrix(~ factor(flight_num) + factor(DAY_OF_WEEK) + factor(Season) + Avg_Departure_Delay + Avg_Arrival_Delay+Avg_Distance+Avg_Elapsed_Time, data = airport_dep_delay1)
+airport_scaled_data1 = scale(airport_departure_delay1_num)
+seg.summ <- function(data, groups) {
+  aggregate(data, list(groups), function(x) mean(as.numeric(x)))  
+}
+k.max <- 15
+wss <- sapply(1:k.max, 
+              function(k){kmeans(airport_scaled_data1[, -1], k, nstart=50, iter.max = 20)$tot.withinss})
+wss
+
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+# Find the K-means groups
+```{r}
+set.seed(96743)        # because starting assignments are random
+seg.k7 <- kmeans(airport_scaled_data1[,-1], centers=7)
+
+seg.summ(airport_departure_delay1_num, seg.k7$cluster)
+```
+
+```{r}
+#baseline linear regression
+lm_departuredelayA= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(flight_num)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Elapsed_Time, data=airport_dep_delay1)
+summary(lm_departuredelayA)
+
+anova(lm_departuredelayA)
+```
+
+```{r}
+#Baseline regression + clustering 
+lm_departuredelayA1= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(flight_num)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Elapsed_Time+seg.k7$cluster, data=airport_dep_delay1)
+summary(lm_departuredelayA1)
+anova(lm_departuredelayA1)
+```
+
+```{r}
+#k-means clustering with baseline regresssion 
+airport_departure_delay1_num <- model.matrix(~ factor(flight_num) + factor(DAY_OF_WEEK) + factor(Season) + Avg_Departure_Delay + Avg_Arrival_Delay+Avg_Distance+Avg_Elapsed_Time+Avg_Taxi_In+Avg_Taxi_Out+Avg_Wheels_On+Avg_Wheels_Off+Avg_Air_Time, data = airport_dep_delay1)
+
+airport_scaled_data1 = scale(airport_departure_delay1_num)
+
+seg.summ <- function(data, groups) {
+  aggregate(data, list(groups), function(x) mean(as.numeric(x)))  
+}
+k.max <- 15
+wss <- sapply(1:k.max, 
+              function(k){kmeans(airport_scaled_data1[, -1], k, nstart=50, iter.max = 20)$tot.withinss})
+wss
+
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+# Find the K-means groups
+```{r}
+set.seed(96743)        # because starting assignments are random
+seg.k10 <- kmeans(airport_scaled_data1[,-1], centers=10)
+
+seg.summ(airport_departure_delay1_num, seg.k10$cluster)
+```
+
+```{r}
+#Omitted Variables
+lm_departuredelayA2= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(flight_num)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Taxi_In+Avg_Taxi_Out+Avg_Wheels_On+Avg_Wheels_Off+Avg_Elapsed_Time+Avg_Air_Time, data=airport_dep_delay1)
+summary(lm_departuredelayA2)
+anova(lm_departuredelayA2)
+```
+
+```{r}
+#Omitted Variables + clustering 
+lm_departuredelayA2.1= lm(Avg_Departure_Delay~ Avg_Arrival_Delay+factor(flight_num)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Taxi_In+Avg_Taxi_Out+Avg_Wheels_On+Avg_Wheels_Off+Avg_Elapsed_Time+Avg_Air_Time+seg.k10$cluster, data=airport_dep_delay1)
+summary(lm_departuredelayA2.1)
+anova(lm_departuredelayA2.1)
+
+```
+
+```{r}
+#logistic regression 
+glm_cancelled1= glm(formula = factor(CANCELLED) ~ factor(flight_num)+factor(DAY_OF_WEEK)+factor(Season)+Avg_Distance+Avg_Elapsed_Time, family=binomial, data= airport_dep_delay1)
+summary(glm_cancelled1)
+```
+
+
+
+## Conclusion
+
+In this project, the purpose is to obtain a comprehensive analysis for the flight delay across the U.S. We complete the data visualization for the performance of domestic flights operated by large air carriers and give summary information on the number of on-time, delayed, canceled, and diverted flights.
+We find that weather and carrier delay play an essential role when it comes to the cancellation of flights.
+For delay analysis, it is evident that larger carriers have more delays and also sometimes the more significant delays are during a specific time of the hour or a particular day. This data is interesting as an airport wise summary will make the airport and the airlines understand the delay and cancellation dynamics better and take corrective measures.
+We further run the correlation, chi-square, and t-test to check the statistic significance among different variables such as airlines, the day of the week, or month. We also run the regression analysis to identify the main factors that affect the delay, cancellation and diverted situation. Some of the elements are standing out throughout our investigation. For example, airlines NK and F9, two airlines with the most delay shown on our visualization, also return an essential significance in our statistical test. Besides, airline HA present its great advantage on having its on-time flight in our analysis for both the part of visualization and statistic test. The frequency of the delay situation in the different period also clearly present in our report. In conclusion, our analysis in delay is aim to help people to build up their travel schedule and choose the appropriate airline with a minimum delay and thus lower down the cost caused by delay and maximumly enjoy their fly experience.
+____________________________________________________________________
+
+**Appendix**
+**Supporting Plots for the analysis and tables**
+
+airline name and code 
+UA
+United Air Lines Inc.
+
+AA
+American Airlines Inc.
+
+US
+US Airways Inc.
+
+F9
+Frontier Airlines Inc.
+
+B6
+JetBlue Airways
+
+OO
+Skywest Airlines Inc.
+
+AS
+Alaska Airlines Inc.
+
+NK
+Spirit Air Lines
+
+WN
+Southwest Airlines Co.
+
+DL
+Delta Air Lines Inc.
+
+EV
+Atlantic Southeast Airlines
+
+HA
+Hawaiian Airlines Inc.
+
+MQ
+American Eagle Airlines Inc.
+
+VX
+Virgin America

@@ -1,0 +1,327 @@
+---
+title: "Homezilla Project"
+author: "Salil Redkar, Shaoping Huang, Yumeng Zhu, DH Daniel Suh"
+date: "10/5/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Question 1
+
+
+
+
+## a.
+```{r,echo=FALSE,error==FALSE}
+#Loading the libraries
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+
+properties<- read_xlsx("W16604-XLS-ENG.xlsx")
+browsing<- read_xlsx("W16604-XLS-ENG.xlsx",sheet = "Browsing Data")
+
+ncol(properties)
+ncol(browsing)
+nrow(properties)
+nrow(browsing)
+```
+
+This  chunk of code loads the required libraries, and reads the excel file using the "sheet" argument to specify the specific sheet.
+
+## b.
+```{r}
+# Cleaning Data
+properties= properties%>%filter(type == "house")
+```
+
+The filter command is used to use the specific properties that are not listed as 'vacant' in the 'type' variable. 
+
+
+# Question 2
+
+## a.
+
+```{r}
+
+unique_customers<-browsing%>%group_by(`Web ID`)%>% summarize(Num_customers=n_distinct(a=`Customer ID`),Num_of_photos=n_distinct(`Photo ID`))
+
+unique_customers
+
+```
+
+
+
+## b.
+```{r}
+properties <- merge(properties, unique_customers)
+
+```
+
+
+## c.
+
+```{r}
+
+sub_table<-properties%>% group_by(subtype, bedrooms)%>% summarize(supply=n_distinct(`Web ID`),avg_price=mean(price),cust_subtype=sum(Num_customers))
+
+sub_table
+                                                           
+sub_supply<-sub_table%>% ggplot(aes(x=subtype, y=supply, fill = as.factor(bedrooms)))+ 
+  geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=supply), vjust=1.1, color = "black", position = position_dodge(0.9), size = 5.5) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Supply - Subtype",
+       x = "Subtype",
+       y = "Supply") + 
+  theme(legend.position = "right")
+
+sub_supply
+
+
+```
+
+
+It is evident that 'Single Family Detached' houses with 3 bedrooms have more listings on the website than any other subtype. Condos and townhouses usually have only one or two bedrooms, with 2 bedroom Condos being the next popular category. The detached houses with more than 5 bedrooms do not have as many listings as the rest.  
+
+
+
+
+```{r}
+
+bed_price<-sub_table%>% ggplot(aes(x=subtype, y=avg_price, fill = as.factor(bedrooms)))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=avg_price), vjust=1.1, color = "black", position = position_dodge(0.9), size = 3) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Average Price - Subtype",
+       x = "Subtype",
+       y = "Average Price") + 
+  theme(legend.position = "right")
+
+bed_price
+
+```
+
+As can be expected, the prices of the single family houses increase with the number of bedrooms. However, there are some houses with 5 bedrooms that are significantly more expensive than the houses with more bedrooms. This is probabaly due to other factors, such as location of the listing in a more expensive neighbourhood. 
+
+
+
+
+```{r}
+sub_customers<-sub_table%>% ggplot(aes(x=subtype, y=cust_subtype, fill = as.factor(bedrooms)))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=cust_subtype), vjust=1.1, color = "black", position = position_dodge(0.9), size = 3.5) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Total Exterior Photo",
+       x = "Subtype",
+       y = "Customer") + 
+  theme(legend.position = "right")
+
+sub_customers
+```
+
+The single family detached houses with 3 bedrooms are most attractive to customers. Townhouse as a subtype has the least demand. 
+As a result, we recommend that HomeZilla should focus more on single family detached houses, especially those that have 2 bedrooms, and condo apartments rather than townhouses. 
+
+
+
+
+
+# Question 3
+
+```{r}
+
+num_photos_subbed<-properties %>% group_by(subtype, bedrooms)%>% summarize(supply=n_distinct(`Web ID`), Numofph = sum(Num_of_photos), Avg_photo=mean(Num_of_photos))
+
+num_photos_subbed
+
+
+num_photos_subbed %>%ggplot(aes(x=subtype, y=Numofph,fill=as.factor(bedrooms)))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=Numofph), vjust=1.1, color = "black", position = position_dodge(0.9), size = 3.5) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Photo - Subtype",
+       x = "Subtype",
+       y = "Number of Photo") + 
+  theme(legend.position = "right")
+```
+
+As before, this result shows us that the Single family detached houses are popular, with their popularity reflected in the number of photos being higher than any other subtype. Homezilla should ensure more number of photos are posted for single detached houses with 3 bedrooms. We chose to use the total count of the number of photos over the average count, because, the total count allowed us to make a better judgement about the distribution of the photos. 
+
+
+
+
+# Question 4
+
+
+
+## a.
+```{r}
+
+photo_cust_time <- group_by(browsing, `Web ID`, `Customer ID`) %>% summarise(Numofph = n_distinct(`Photo ID`),Totaltime = sum(`Time Viewed`))
+  
+photo_cust_time 
+
+```
+
+## b.
+```{r}
+properties<-merge(properties,photo_cust_time)
+```
+
+
+## c.
+
+
+```{r}
+avg_pic_time<- properties%>%group_by(subtype,bedrooms)%>% summarize(Avg_pic_viewed=mean(Numofph),Avg_time_spent=mean(Totaltime),num_cus=n_distinct(`Customer ID`))
+
+avg_pic_time
+
+properties %>% ggplot(aes(x=subtype,y=Totaltime))+geom_point()
+
+avg_pic_time%>% ggplot(aes(x=subtype, y=Avg_pic_viewed,fill=as.factor(bedrooms)))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=Avg_pic_viewed), vjust=1.1, color = "black", position = position_dodge(0.9), size = 3.5) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Average picture Viewed - Subtype",
+       x = "Subtype",
+       y = "Average picture Viewed") + 
+  theme(legend.position = "right")
+
+
+
+        
+avg_pic_time%>% ggplot(aes(x=as.factor(subtype), y=Avg_time_spent,fill=subtype))+
+        geom_bar(stat="identity",position="dodge") +
+        scale_x_discrete(breaks=seq(0,10,1)) +
+  labs(title = "Average time spent - Subtype",
+       x = "Subtype",
+       y = "Average time spent") + 
+  theme(legend.position = "right") +  
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms")
+
+
+
+avg_pic_time%>% ggplot(aes(x=subtype, y=num_cus,fill=as.factor(bedrooms)))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=num_cus), vjust=1.1, color = "black", position = position_dodge(0.9), size = 3.5) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Number of Customers - Subtype",
+       x = "Subtype",
+       y = "Number of Customers") + 
+  theme(legend.position = "right")
+
+
+
+
+```
+The average number of photos seen for each subtype are more or else uniform across board. The higher values for the Single Family Detached houses with bedrooms greater than 5 are a result of the higher number of photos for each listing, and fewer listings of that size. Certain outliers in the townhouse subtype affect the analysis for the average time spent looking at the photos. More analysis in required before eliminating these form the dataset. It is likely that removing these outliers from the dataset will result in the detached houses as the subtype which customers spend more time looking at pictures.    
+
+
+
+
+# Question 5
+```{r}
+
+photos_perprop<- browsing %>% group_by(`Web ID`, `Photo Tag 1`) %>% summarise(`Distinct Photos`= n_distinct(`Photo ID`))
+
+d5<- spread(photos_perprop, `Photo Tag 1`, `Distinct Photos`)
+
+
+d5.1<- merge(properties, d5)
+
+a6 <- d5.1 %>% 
+  group_by(subtype, bedrooms) %>% 
+  summarise(Tot_photo_ex = sum(exterior), 
+            Tot_photo_in = sum(interior), 
+            Tot_photo_floor = sum(floor))
+
+a6 %>% ggplot(aes(x = subtype, 
+                  y = Tot_photo_ex, 
+                  fill = as.factor(bedrooms))) + 
+  geom_bar(position = position_dodge(), stat = "identity") + 
+  geom_text(aes(label=Tot_photo_ex), vjust=1.1, color = "white", position = position_dodge(0.9), size = 5.5) + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Total Exterior Photo",
+       x = "Subtype",
+       y = "Total Exterior Photo") + 
+  theme(legend.position = "right")
+
+
+a6 %>% ggplot(aes(x = subtype, 
+                  y = Tot_photo_in, 
+                  fill = as.factor(bedrooms))) + 
+                geom_bar(position = position_dodge(), stat = "identity") +
+                geom_text(aes(label=Tot_photo_in), vjust=1.1, color = "black", position = position_dodge(0.9), size = 3) + 
+                scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Total Interior Photo",
+       x = "Subtype",
+       y = "Total Interior Photo") + 
+  theme(legend.position = "right")
+
+cust_ph_time <- group_by(browsing, `Web ID`, `Customer ID`, `Photo Tag 1`) %>%summarise(Numofph = n_distinct(`Photo ID`),Totaltime = sum(`Time Viewed`))
+
+
+merged_phtime<-merge(properties, cust_ph_time)
+
+
+sub_tag_avg <- merged_phtime %>% group_by(subtype,bedrooms, `Photo Tag 1`) %>% 
+  summarise(Numofcus = n_distinct(`Customer ID`), 
+            Avg_pic_viewed=mean(Numofph),
+            Avg_time_spent_in_sec=mean(Totaltime))
+        
+
+sub_tag_avg  %>% ggplot(aes(x=subtype,y=Numofcus,fill=`Photo Tag 1`))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Number of Customers - Subtype",
+       x = "Subtype",
+       y = "Number of Customers") + 
+  theme(legend.position = "right")
+
+
+
+sub_tag_avg  %>% ggplot(aes(x=as.factor(bedrooms),y=Avg_pic_viewed,fill=`Photo Tag 1`))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Average picture viewed - Subtype",
+       x = "Subtype",
+       y = "Average picture viewed") + 
+  theme(legend.position = "right") +
+        facet_grid(.~subtype)+scale_x_discrete(breaks=seq(0,10,1))
+
+
+
+
+sub_tag_avg  %>% ggplot(aes(x=as.factor(bedrooms),y=Avg_time_spent_in_sec,fill=`Photo Tag 1`))+
+        geom_bar(position = position_dodge(), stat = "identity") + 
+  scale_fill_brewer(palette = "Paired", name = "Number of Bedrooms") + 
+  labs(title = "Average time spent - Subtype",
+       x = "Subtype",
+       y = "Average time spent") + 
+  theme(legend.position = "right") +
+        facet_grid(.~subtype)+scale_x_discrete(breaks=seq(0,10,1))
+        
+
+```
+Based on the total exterior photos that customers have clicked on, it is clear that this echoes the results from our previous analysis. The detached houses with 3 bedrooms have significantly higher numbers of the time that customers spent on exterior photos, compared to other subtype and categories. This is also seen in the time that customers spent on the interior photos of these houses. It is interesting to note that, for condos with 2 bedrooms also have a significant number of customers looking at indoor photos, since condos wwould have fewer exterior photos. HomeZilla should cnocentrate on ensuring that interior photos for condos, and interior and exterior photos for detached houses are more appealling since these are the photos most customers spend time looking at. Surprisingly, the number of customers is higher for the condo apartments, with many of these customers more interested in the interiors. It is evident that customers spend more time looking at interior photos rather than exterior ones, and it would be in Homezilla's best interest to focus on the interior photos. The outliers in the dataset affect the analysis for the the average time spent looking at the photo and they are concentrated in the detached houses with 6 bedrooms. 
+
+# Question 6
+
+
+
+
+The most important takeaway from the analysis is that Homezilla's focus should be on their 'Single Family House' listings. The most popular house in terms of supply is of the detached type with 3 bedrooms. These are not just high in supply, but also, have many customers looking at the interiors. We also saw certain houses from this category whose price did not increase linearly with the number of bedrooms. As mentioned before, the location of the houses may play a role in their price. The high number of photos for the the single family detached houses may also play a role in generating interest for this category, and if it is so, then this may be replicated for the other categories as well. With regards to customer browsing data, customers are in geeneral more interested in the housing interiors, and more appealing interior photos will generate more interest in a house. It is intersting to note that many customers viewed the photos for condo apartments, but that did not translate into interest as measured by the time spent looking at the photos. In this category again, the single family detached houses dominated. In conclusion, HomeZilla should expend resources in making sure the single family detached houses and more specifically their interiors, are a focus in determining their future strategy.
+
+
+
+
+
+
+
+
